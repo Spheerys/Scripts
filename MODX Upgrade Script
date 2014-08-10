@@ -1,0 +1,196 @@
+#!/bin/bash
+
+# modx update script
+# -------------------
+# A shell script to help automate the upgrade of a MODX Revolution installation
+# This script is for traditional installations only - not advanced
+
+
+
+# --------------
+# Config section
+# --------------
+
+SOURCE_DIR="/root/utils"
+MODX_PACKAGE_MAX_AGE=86400
+MODX_PACKAGE_LAST_FILENAME="modx-lastest.zip"
+MODX_LAST_DIR="modx-lastest"
+
+
+# ---------------
+# Start of script
+# ---------------
+
+# Set to exit on error
+set -e
+
+# Define some colours
+red='\e[0;31m'
+green='\e[0;32m'
+yellow='\e[1;33m'
+litegreen='\e[1;32m'
+purple='\e[0;35m'
+NC='\e[0m' # No Color
+
+
+
+# -------------------
+# FUNCTION : Get MODX
+# -------------------
+function get_modx {
+  echo -e "${litegreen}------------${NC}"
+  echo -e "${litegreen}Getting MODX${NC}"
+  echo -e "${litegreen}------------${NC}"
+
+  # Downloading only if not exist or it's to older
+  if [ -f $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME ]
+    then
+      MODX_PACKAGE_LAST_DOWNLOADED_DATE=`stat -c %X $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME`
+      CURRENT_DATE=`date +%s`
+      MODX_PACKAGE_CURRENT_AGE=$(( ($CURRENT_DATE - $MODX_PACKAGE_LAST_DOWNLOADED_DATE) ))
+    else
+      MODX_PACKAGE_CURRENT_AGE=86400000
+  fi
+  if [ $MODX_PACKAGE_CURRENT_AGE -gt $MODX_PACKAGE_MAX_AGE ]
+    then
+      # Delete old packages and old directories
+      rm -fr $SOURCE_DIR/{modx-2*,$MODX_LAST_DIR}
+      rm -f $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME
+
+      # Getting last MODX package
+      wget -O $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME http://modx.com/download/latest
+      echo -e "-> download MODX package ${green}[OK]${NC}"
+
+      # Unzip the package on the Source Directory
+      unzip -o -q $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME -d $SOURCE_DIR
+      echo -e "-> extract MODX package inside $SOURCE_DIR/ ${green}[OK]${NC}"
+
+      # Finding the name of the lastest created directory during the extraction
+      LAST_CREATED_DIR=$(find $SOURCE_DIR/modx-2* -type d -prune -exec ls -d {} \; |tail -1)
+
+      # Symbolic link is created to set an unvariable path to the last version of MODX
+      ln -s $LAST_CREATED_DIR $SOURCE_DIR/$MODX_LAST_DIR
+      echo -e "-> symbolic link to $SOURCE_DIR/$MODX_LAST_DIR ${green}[OK]${NC}"
+      echo ""
+    else
+      echo -e "${green}[INFO]${NC} The MODX package is very fresh (less than 24h). Not necessary to download it again."
+      echo ""
+  fi
+}
+
+# -------------------
+# FUNCTION : Put MODX
+# -------------------
+function put_modx {
+  echo -e "${litegreen}----------------------------------${NC}"
+  echo -e "${litegreen}Copy new MODX files on the project${NC}"
+  echo -e "${litegreen}----------------------------------${NC}"
+
+  # Directory verification : we're checking the owner of the directory where we are
+  # It's specidic to my server... so adapt to yours
+  # If we are not on a correct directory project, we stop
+  PROJECT_DIR_OWNER=$(ls -ld .|awk '{ print $3 }')
+
+  if [ "$(echo $PROJECT_DIR_OWNER | grep -E "vu([0-9]{4})")" ]
+  then
+    echo ""
+    echo "Copying the last files of MODX in ${PWD}"
+    cp -Rf /root/utils/modx-lastest/* ./
+    echo -e " -> done ${green}[OK]${NC}"
+
+    echo ""
+    echo "Setting correct owner to the files inside ${PWD}"
+    chown -R $PROJECT_DIR_OWNER.www-data ./
+    echo -e " -> done ${green}[OK]${NC}"
+    echo ""
+
+  else
+          echo "CANCELATION : you are not in a correct project directory !!"
+          exit
+  fi
+}
+
+# -----------------------
+# FUNCTION : Upgrade MODX
+# -----------------------
+function up_modx {
+  echo -e "${litegreen}------------------------ ${NC}"
+  echo -e "${litegreen}Running the MODX upgrade ${NC}"
+  echo -e "${litegreen}------------------------ ${NC}"
+  echo "Upgrading in progress..."
+
+  # The fabulous command
+  # The config-modx.xml file is just setting the language
+  /usr/bin/php ./setup/index.php --installmode=upgrade --config=/root/bin/config-modx.xml
+}
+
+
+# -------------------
+# FUNCTION : Cleaning
+# -------------------
+function clean_modx {
+  echo -e "${litegreen}-------------------- ${NC}"
+  echo -e "${litegreen}Cleaning old package ${NC}"
+  echo -e "${litegreen}-------------------- ${NC}"
+  # Delete old package and old directories
+  rm -fr $SOURCE_DIR/{modx-2*,modx-lastest}
+  rm -f $SOURCE_DIR/modx-lastest.zip
+  echo -e "-> old MODX packages and directories removed from $SOURCE_DIR/ ${green}[OK]${NC}"
+  echo ""
+  exit
+}
+
+
+
+
+
+# ============
+# Introduction
+# ============
+echo ''
+echo -e "${litegreen}* * * * * * * * * * ${NC}"
+echo -e "${litegreen}MODX UPGRADE SCRIPT ${NC}"
+echo -e "${litegreen}* * * * * * * * * * ${NC}"
+echo ''
+echo -e "What do you want to do ?"
+echo -e "------------------------"
+echo -e "- get    : getting the last MODX Revolution package and unpack it on $SOURCE_DIR/$MODX_LAST_DIR"
+echo -e "- put    : copy $SOURCE_DIR/$MODX_LAST_DIR to ${yellow}${PWD}${NC}"
+echo -e "- up     : run upgrade command in ${yellow}${PWD}${NC}"
+echo -e "- put-up : copy AND run upgrade command in ${yellow}${PWD}${NC}"
+echo -e "- clean  : remove every MODX sources in $SOURCE_DIR/"
+echo ''
+
+
+# ===========
+# The choices
+# ===========
+echo -e "You are in ${PWD}"
+PS3='Please enter your choice  : '
+options=("get" "put" "up" "put-up" "clean" "Quit")
+select opt in "${options[@]}"
+do
+  case $opt in
+    "get")
+      get_modx;;
+    "put")
+      put_modx;;
+    "up")
+      up_modx
+      exit
+    ;;
+    "put-up")
+      put_modx
+      up_modx
+      exit
+    ;;
+    "clean")
+      clean_modx;;
+    "Quit")
+        break
+        ;;
+    *) echo -e "${red}[ERROR]${NC} Invalid option";;
+  esac
+done
+
+
