@@ -1,16 +1,22 @@
 #!/bin/bash
 
-# modx update script
+# MODX Update Script
 # -------------------
-# A shell script to help automate the upgrade of a MODX Revolution installation
-# This script is for traditional installations only - not advanced
+# This shell script automate the upgrade of a MODX Revolution installation
+# on command line (CLI) on a webserver.
+# Is not bullet proof and has to be understood and adapted to each user.
+# I wrote it because upgrading 60 Revolution website is long and boring.
+# With it, you can update a Revolution Website in 8 seconds without mouse
+#
+# BE SURE TO HAVE FONCTIONNAL BACKUP BEFORE USING THIS SCRIPT (database dump AND files)
+#
+# Thanks to Christian Hanvey for the inspiration https://gist.github.com/christianhanvey/5592012
 
 
 
 # --------------
 # Config section
 # --------------
-
 SOURCE_DIR="/root/utils"
 MODX_PACKAGE_MAX_AGE=86400
 MODX_PACKAGE_LAST_FILENAME="modx-lastest.zip"
@@ -20,10 +26,8 @@ MODX_LAST_DIR="modx-lastest"
 # ---------------
 # Start of script
 # ---------------
-
 # Set to exit on error
 set -e
-
 # Define some colours
 red='\e[0;31m'
 green='\e[0;32m'
@@ -33,10 +37,29 @@ purple='\e[0;35m'
 NC='\e[0m' # No Color
 
 
+# -------------------
+# FUNCTION : Cleaning
+# -------------------
+# 1/ Remove all packages, sources directory and symlink of MODX in the $SOURCE_DIR
+function clean_modx {
+  echo -e "${litegreen}-------------------- ${NC}"
+  echo -e "${litegreen}Cleaning old package ${NC}"
+  echo -e "${litegreen}-------------------- ${NC}"
+  # Delete old package, directories and symlink
+  rm -fr $SOURCE_DIR/{modx-2*,$MODX_LAST_DIR}
+  rm -f $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME
+  echo -e "-> old MODX packages and directories removed from $SOURCE_DIR/ ${green}[OK]${NC}"
+  echo ""
+}
+
 
 # -------------------
 # FUNCTION : Get MODX
 # -------------------
+# 1/ Check if package is older than a day before downloading it again
+# 2/ Remove older source package and directories
+# 3/ Download last MODX version and extract it to $SOURCE_DIR
+# 4/ Make a symlink from $SOURCE_DIR/modx-2.3.1-pl to $SOURCE_DIR/modx-lastest
 function get_modx {
   echo -e "${litegreen}------------${NC}"
   echo -e "${litegreen}Getting MODX${NC}"
@@ -53,9 +76,8 @@ function get_modx {
   fi
   if [ $MODX_PACKAGE_CURRENT_AGE -gt $MODX_PACKAGE_MAX_AGE ]
     then
-      # Delete old packages and old directories
-      rm -fr $SOURCE_DIR/{modx-2*,$MODX_LAST_DIR}
-      rm -f $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME
+      # Function call to cleaning old package
+      clean_modx
 
       # Getting last MODX package
       wget -O $SOURCE_DIR/$MODX_PACKAGE_LAST_FILENAME http://modx.com/download/latest
@@ -78,9 +100,13 @@ function get_modx {
   fi
 }
 
+
 # -------------------
 # FUNCTION : Put MODX
 # -------------------
+# 1/ Check if we are in the right place (the root of one Revo Website). The test is made for my server
+# 2/ If yes, copy new MODX files to the current directory (the project which has to be upgraded)
+# 3/ Setting correct owner to the files inside the directory project to upgrade
 function put_modx {
   echo -e "${litegreen}----------------------------------${NC}"
   echo -e "${litegreen}Copy new MODX files on the project${NC}"
@@ -110,37 +136,19 @@ function put_modx {
   fi
 }
 
+
 # -----------------------
 # FUNCTION : Upgrade MODX
 # -----------------------
+# 1/ The fabulous CLI to upgrade in 7 seconds. I'm using an optionnal config-modx.xml file just to set the language
 function up_modx {
   echo -e "${litegreen}------------------------ ${NC}"
   echo -e "${litegreen}Running the MODX upgrade ${NC}"
   echo -e "${litegreen}------------------------ ${NC}"
   echo "Upgrading in progress..."
 
-  # The fabulous command
-  # The config-modx.xml file is just setting the language
   /usr/bin/php ./setup/index.php --installmode=upgrade --config=/root/bin/config-modx.xml
 }
-
-
-# -------------------
-# FUNCTION : Cleaning
-# -------------------
-function clean_modx {
-  echo -e "${litegreen}-------------------- ${NC}"
-  echo -e "${litegreen}Cleaning old package ${NC}"
-  echo -e "${litegreen}-------------------- ${NC}"
-  # Delete old package and old directories
-  rm -fr $SOURCE_DIR/{modx-2*,modx-lastest}
-  rm -f $SOURCE_DIR/modx-lastest.zip
-  echo -e "-> old MODX packages and directories removed from $SOURCE_DIR/ ${green}[OK]${NC}"
-  echo ""
-  exit
-}
-
-
 
 
 
@@ -185,7 +193,9 @@ do
       exit
     ;;
     "clean")
-      clean_modx;;
+      clean_modx
+      exit
+    ;;
     "Quit")
         break
         ;;
